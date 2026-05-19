@@ -3,6 +3,7 @@ import { db } from "@cap/database";
 import { DrizzleQueryError } from "drizzle-orm";
 import { migrate } from "drizzle-orm/mysql2/migrator";
 
+import { runDomainOrganizationBackfill } from "./migrations/domain_organization_backfill.ts";
 import { runOrgIdBackfill } from "./migrations/orgid_backfill.ts";
 import { runSpaceMemberRoleBackfill } from "./migrations/space_member_role_backfill.ts";
 
@@ -43,4 +44,5 @@ export async function migrateDb() {
 	}
 
 	await runSpaceMemberRoleBackfill();
+	await runDomainOrganizationBackfill();
 }
