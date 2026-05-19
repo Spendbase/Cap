@@ -1,6 +1,6 @@
 import { STRIPE_AVAILABLE, stripe } from "@cap/utils";
 import { type ImageUpload, Organisation, User } from "@cap/web-domain";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { MySql2Database } from "drizzle-orm/mysql2";
 import type { Adapter } from "next-auth/adapters";
 import type Stripe from "stripe";
@@ -14,11 +14,24 @@ import {
 	users,
 	verificationTokens,
 } from "../schema.ts";
+import { extractDomainFromEmail } from "./domain-utils.ts";
+
+function autoJoinedOnboardingSteps(name: string | null | undefined) {
+	return {
+		...(name && name.trim().length > 0 ? { welcome: true } : {}),
+		organizationSetup: true,
+		customDomain: true,
+		inviteTeam: true,
+		download: true,
+	};
+}
 
 export function DrizzleAdapter(db: MySql2Database): Adapter {
 	return {
 		async createUser(userData: any) {
 			const normalizedEmail = (userData.email as string)?.toLowerCase() ?? "";
+			const emailDomain =
+				extractDomainFromEmail(normalizedEmail)?.toLowerCase();
 			const userId = User.UserId.make(nanoId());
 			await db.transaction(async (tx) => {
 				const [pendingInvite] = await tx
@@ -31,6 +44,88 @@ export function DrizzleAdapter(db: MySql2Database): Adapter {
 						),
 					)
 					.limit(1);
+
+				const [matchingOrganization] =
+					!pendingInvite && emailDomain
+						? await tx
+								.select({
+									id: organizations.id,
+									ownerId: organizations.ownerId,
+								})
+								.from(organizations)
+								.where(
+									and(
+										eq(organizations.allowedEmailDomain, emailDomain),
+										isNull(organizations.tombstoneAt),
+									),
+								)
+								.orderBy(asc(organizations.createdAt))
+								.limit(1)
+						: [];
+
+				if (matchingOrganization) {
+					await tx.insert(users).values({
+						id: userId,
+						email: normalizedEmail,
+						emailVerified: userData.emailVerified,
+						name: userData.name,
+						image: userData.image,
+						activeOrganizationId: matchingOrganization.id,
+						defaultOrgId: matchingOrganization.id,
+						onboardingSteps: autoJoinedOnboardingSteps(userData.name),
+					});
+
+					const memberId = nanoId();
+					await tx.insert(organizationMembers).values({
+						id: memberId,
+						organizationId: matchingOrganization.id,
+						userId,
+						role: "member",
+					});
+
+					const [owner] = await tx
+						.select({
+							inviteQuota: users.inviteQuota,
+							stripeSubscriptionId: users.stripeSubscriptionId,
+						})
+						.from(users)
+						.where(eq(users.id, matchingOrganization.ownerId))
+						.limit(1);
+
+					if (owner?.stripeSubscriptionId) {
+						const allMembers = await tx
+							.select({
+								id: organizationMembers.id,
+								hasProSeat: organizationMembers.hasProSeat,
+							})
+							.from(organizationMembers)
+							.where(
+								eq(organizationMembers.organizationId, matchingOrganization.id),
+							)
+							.for("update");
+
+						const proSeatsUsed = allMembers.filter(
+							(member) => member.hasProSeat,
+						).length;
+						const proSeatsRemaining = (owner.inviteQuota ?? 1) - proSeatsUsed;
+
+						if (proSeatsRemaining > 0) {
+							await tx
+								.update(organizationMembers)
+								.set({ hasProSeat: true })
+								.where(eq(organizationMembers.id, memberId));
+
+							await tx
+								.update(users)
+								.set({
+									thirdPartyStripeSubscriptionId: owner.stripeSubscriptionId,
+								})
+								.where(eq(users.id, userId));
+						}
+					}
+
+					return;
+				}
 
 				await tx.insert(users).values({
 					id: userId,
@@ -51,6 +146,7 @@ export function DrizzleAdapter(db: MySql2Database): Adapter {
 					id: organizationId,
 					ownerId: userId,
 					name: "My Organization",
+					allowedEmailDomain: emailDomain,
 				});
 
 				await tx.insert(organizationMembers).values({

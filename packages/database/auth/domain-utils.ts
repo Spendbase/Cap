@@ -18,7 +18,7 @@ export function isEmailAllowedForSignup(
 	return allowedDomains.includes(emailDomain.toLowerCase());
 }
 
-function extractDomainFromEmail(email: string): string | null {
+export function extractDomainFromEmail(email: string): string | null {
 	// TODO: replace with zod v4's z.email()
 	const emailValidation = z.string().email().safeParse(email);
 	if (!emailValidation.success) {
