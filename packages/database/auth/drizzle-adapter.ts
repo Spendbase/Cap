@@ -55,7 +55,7 @@ export function DrizzleAdapter(db: MySql2Database): Adapter {
 								.from(organizations)
 								.where(
 									and(
-										eq(organizations.allowedEmailDomain, emailDomain),
+										eq(organizations.autoJoinDomain, emailDomain),
 										isNull(organizations.tombstoneAt),
 									),
 								)
@@ -146,7 +146,7 @@ export function DrizzleAdapter(db: MySql2Database): Adapter {
 					id: organizationId,
 					ownerId: userId,
 					name: "My Organization",
-					allowedEmailDomain: emailDomain,
+					autoJoinDomain: emailDomain,
 				});
 
 				await tx.insert(organizationMembers).values({

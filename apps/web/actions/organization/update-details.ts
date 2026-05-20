@@ -11,10 +11,12 @@ import { requireOrganizationSettingsManager } from "./authorization";
 export async function updateOrganizationDetails({
 	organizationName,
 	allowedEmailDomain,
+	autoJoinDomain,
 	organizationId,
 }: {
 	organizationName?: string | null;
 	allowedEmailDomain?: string | null;
+	autoJoinDomain?: string | null;
 	organizationId: Organisation.OrganisationId;
 }) {
 	const user = await getCurrentUser();
@@ -43,11 +45,20 @@ export async function updateOrganizationDetails({
 			.where(eq(organizations.id, organizationId));
 	}
 
-	if (allowedEmailDomain || allowedEmailDomain === "") {
+	if (allowedEmailDomain !== undefined) {
 		await db()
 			.update(organizations)
 			.set({
-				allowedEmailDomain: allowedEmailDomain,
+				allowedEmailDomain: allowedEmailDomain || null,
+			})
+			.where(eq(organizations.id, organizationId));
+	}
+
+	if (autoJoinDomain !== undefined) {
+		await db()
+			.update(organizations)
+			.set({
+				autoJoinDomain: autoJoinDomain || null,
 			})
 			.where(eq(organizations.id, organizationId));
 	}

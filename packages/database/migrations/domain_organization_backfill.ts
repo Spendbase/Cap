@@ -49,20 +49,8 @@ function getPrimaryOrgId(user: DomainUser) {
 	return user.defaultOrganizationId ?? user.activeOrganizationId;
 }
 
-function resolveTargetRole(
-	userId: UserId,
-	canonicalOwnerId: UserId,
-	sourceOwnerIds: Set<UserId>,
-	existingRole: MembershipRow["role"] | undefined,
-) {
+function resolveTargetRole(userId: UserId, canonicalOwnerId: UserId) {
 	if (userId === canonicalOwnerId) return "owner";
-	if (
-		existingRole === "owner" ||
-		existingRole === "admin" ||
-		sourceOwnerIds.has(userId)
-	) {
-		return "admin";
-	}
 	return "member";
 }
 
@@ -87,7 +75,7 @@ async function mergeDomainOrganizations(
 			id: organizations.id,
 			ownerId: organizations.ownerId,
 			name: organizations.name,
-			allowedEmailDomain: organizations.allowedEmailDomain,
+			autoJoinDomain: organizations.autoJoinDomain,
 			createdAt: organizations.createdAt,
 			tombstoneAt: organizations.tombstoneAt,
 		})
@@ -116,7 +104,6 @@ async function mergeDomainOrganizations(
 			),
 		);
 
-	const orgsById = new Map(liveOrgs.map((org) => [org.id, org]));
 	const membershipsByOrg = new Map<string, MembershipRow[]>();
 	for (const membership of membershipRows) {
 		const current = membershipsByOrg.get(membership.organizationId) ?? [];
@@ -149,33 +136,22 @@ async function mergeDomainOrganizations(
 		.map((org) => org.id)
 		.filter((orgId) => orgId !== canonicalOrg.id);
 
-	const sourceOwnerIds = new Set<UserId>(
-		sourceOrgIds
-			.map((orgId) => orgsById.get(orgId)?.ownerId)
-			.filter((ownerId): ownerId is UserId => Boolean(ownerId)),
-	);
-
 	const canonicalMemberships = membershipsByOrg.get(canonicalOrg.id) ?? [];
 	const canonicalMembershipMap = new Map(
 		canonicalMemberships.map((membership) => [membership.userId, membership]),
 	);
 
 	await db().transaction(async (tx) => {
-		if (canonicalOrg.allowedEmailDomain !== domain) {
+		if (canonicalOrg.autoJoinDomain !== domain) {
 			await tx
 				.update(organizations)
-				.set({ allowedEmailDomain: domain })
+				.set({ autoJoinDomain: domain })
 				.where(eq(organizations.id, canonicalOrg.id));
 		}
 
 		for (const user of usersForDomain) {
 			const existingCanonicalMembership = canonicalMembershipMap.get(user.id);
-			const targetRole = resolveTargetRole(
-				user.id,
-				canonicalOrg.ownerId,
-				sourceOwnerIds,
-				existingCanonicalMembership?.role,
-			);
+			const targetRole = resolveTargetRole(user.id, canonicalOrg.ownerId);
 			const preserveProSeat =
 				existingCanonicalMembership?.hasProSeat ??
 				membershipRows.find((membership) => membership.userId === user.id)

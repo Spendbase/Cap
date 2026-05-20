@@ -2,6 +2,7 @@
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@cap/ui";
 import AccessEmailDomain from "./AccessEmailDomain";
+import AutoJoinDomain from "./AutoJoinDomain";
 import { CustomDomain } from "./CustomDomain";
 import { OrganizationIcon } from "./OrganizationIcon";
 import OrgName from "./OrgName";
@@ -13,8 +14,8 @@ export const OrganizationDetailsCard = () => {
 			<CardHeader>
 				<CardTitle>Settings</CardTitle>
 				<CardDescription>
-					Set the organization name, access email domain, custom domain, and
-					organization icons.
+					Set the organization name, custom domain, organization icons,
+					auto-join domain, and email access restriction.
 				</CardDescription>
 			</CardHeader>
 			<div className="grid grid-cols-1 gap-8 md:grid-cols-2">
@@ -22,6 +23,7 @@ export const OrganizationDetailsCard = () => {
 				<CustomDomain />
 				<OrganizationIcon />
 				<ShareableLinkIcon />
+				<AutoJoinDomain />
 				<AccessEmailDomain />
 			</div>
 		</Card>

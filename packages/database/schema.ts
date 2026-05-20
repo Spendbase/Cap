@@ -192,6 +192,7 @@ export const organizations = mysqlTable(
 		metadata: json("metadata"),
 		tombstoneAt: timestamp("tombstoneAt"),
 		allowedEmailDomain: varchar("allowedEmailDomain", { length: 255 }),
+		autoJoinDomain: varchar("autoJoinDomain", { length: 255 }),
 		customDomain: varchar("customDomain", { length: 255 }),
 		domainVerified: timestamp("domainVerified"),
 		settings: json("settings").$type<{
